@@ -1,3 +1,5 @@
+const { expectEvent, shouldFail } = require('openzeppelin-test-helpers');
+
 const Factory = artifacts.require('Factory')
 const MasterRegistry = artifacts.require('MasterRegistry')
 const DAO = artifacts.require('DAO')
@@ -17,90 +19,77 @@ const { abi:accountAbi, bytecode:accountBytecode } = require('../build/contracts
 let computedAddr
 let registry
 let dao
-
-// TODO: proper tests
+let bytecode
+let salt
 
 contract('Factory', (accounts) => {
-  let instance
+  let factory
   let creator = accounts[0]
 
   before('setup', async () => {
-    instance = await Factory.new()
-    factoryAddress = instance.address
-    factoryInstance = await Factory.at(factoryAddress)
+    factory = await Factory.new()
+    factoryInstance = await Factory.at(factory.address)
+
+    // deploy registry
+    registry = await MasterRegistry.new()
+    registryInstance = await MasterRegistry.at(registry.address)
+
+    // constructor arguments are appended to contract bytecode
+    bytecode = `${accountBytecode}${encodeParam('address', creator).slice(2)}${encodeParam('address', registry.address).slice(2)}`
+    salt = 1
+
+    // determine address of Account before it is deployed
+    computedAddr = buildCreate2Address(
+      factory.address,
+      numberToUint256(salt),
+      bytecode
+    )
+
   })
 
   describe('test deploy', () => {
-    it('should deploy factory', async () => {
-      const contract = await isContract(instance.address)
+    it('should deploy Factory', async () => {
+      const contract = await isContract(factory.address)
       assert.isTrue(contract)
     })
-    // it('should get account address', async () => {
-    //   computedAddr = buildCreate2Address(
-    //     factoryAddress,
-    //     numberToUint256(salt),
-    //     bytecode
-    //   )
-    //   console.log(computedAddr)
-
-    //   const contract = await isContract(computedAddr)
-    //   assert.isFalse(contract)
-    // })
+    it('should create Account address but not deploy it', async () => {
+      const contract = await isContract(computedAddr)
+      assert.isFalse(contract)
+    })
     it('should deploy DAO', async () => {
-      // deploy master Registry
-      registry = await MasterRegistry.new()
-      registryInstance = await MasterRegistry.at(registry.address)
-      
-      // constructor arguments are appended to contract bytecode
-      const bytecode = `${accountBytecode}${encodeParam('address', creator).slice(2)}${encodeParam('address', registry.address).slice(2)}`
-      const salt = 1
-
-      // determine address of Account before it is deployed
-      computedAddr = buildCreate2Address(
-        factoryAddress,
-        numberToUint256(salt),
-        bytecode
-      )
-
-      // deploy DAO and pass address of Account contract (not yet deployed)
+      // deploy DAO
       dao = await DAO.new(accounts[2], computedAddr, registry.address);
       daoInstance = await DAO.at(dao.address)
 
-      console.log(await registryInstance.getDAOAddress())
+      const contract = await isContract(dao.address)
+      assert.isTrue(contract)
+    })
+    it('should deploy Account and allow it to pause DAO', async () => {
+      // deploy DAO and pass address of Account contract (not yet deployed)
+      dao = await DAO.new(accounts[2], computedAddr, registry.address);
+      daoInstance = await DAO.at(dao.address)
       
       // now deploy Account
       const tx = await factoryInstance.deploy(bytecode, salt);
       const deployedAddress = tx.receipt.logs[0].args.addr.toLowerCase();
-      // console.log(await isContract(deployedAddress))
-
-      // check if Account can pause DAO
       accountInstance = await Account.at(deployedAddress);
-      console.log(accounts[0])
-      console.log(await accountInstance.owner.call())
 
-      await accountInstance.pause();
-      console.log(await daoInstance.paused())
+      const contract = await isContract(deployedAddress)
+      assert.isTrue(contract)
+
+      // call pause function in Account, which should pause DAO
+      const { logs } = await accountInstance.pause();
+      const paused = await daoInstance.paused();
+      assert.isTrue(paused)
+
+      // expect Pause event
+      expectEvent.inLogs(logs, "Pause")
+
     })
-    // it('should deploy DAO', async () => {
-    //   computedAddr = buildCreate2Address(
-    //     factoryAddress,
-    //     numberToUint256(salt),
-    //     bytecode
-    //   )
-    //   dao = await DAO.new(accounts[2], computedAddr);
-    //   daoInstance = await DAO.at(dao.address)
-      
-    //   master = await daoInstance.master.call()
-    //   // assert.equal(computedAddr, master)
+    it('should revert if deploying to computedAddr again', async () => {
+      // now deploy Account
+      await shouldFail(factoryInstance.deploy(bytecode, salt));
 
-    //   const contract = await isContract(computedAddr)
-    //   assert.isFalse(contract)
-    // })
-    // it('should deploy Account', async () => {
-    //   const tx = await factoryInstance.deploy(bytecode, salt);
-    //   const deployedAddress = tx.receipt.logs[0].args.addr.toLowerCase();
-    //   assert.equal(computedAddr, deployedAddress)
-    //   assert.isTrue(await isContract(deployedAddress)) // true
-    // })
+    })
   })
 })
