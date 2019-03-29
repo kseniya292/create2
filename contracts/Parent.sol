@@ -1,20 +1,20 @@
 pragma solidity >0.4.99 <0.6.0;
 
-import "./DAO.sol";
-import "./MasterRegistry.sol";
+import "./Child.sol";
+import "./Registry.sol";
 
-contract Account {
+contract Parent {
 
   event Pause();
   event Unpause();
 
   address public owner;
-  DAO public dao;
-  MasterRegistry public masterRegistry;
+  Child public child;
+  Registry public registry;
 
   constructor(address payable _owner, address _registry) public {
     owner = _owner;
-    masterRegistry = MasterRegistry(_registry);
+    registry = Registry(_registry);
   }
 
   function setOwner(address _owner) public {
@@ -27,20 +27,22 @@ contract Account {
     selfdestruct(recipient);
   }
 
+  // pauses child contract
   function pause() public returns (bool)
   {
-    address addr = masterRegistry.getDAOAddress();
-    dao = DAO(addr);
-    dao.pause();
+    address addr = registry.getChildAddress();
+    child = Child(addr);
+    child.pause();
     emit Pause();
     return true;
   }
 
+  // unpauses child contract
   function unpause() public returns (bool)
   {
-    address addr = masterRegistry.getDAOAddress();
-    dao = DAO(addr);
-    dao.unpause();
+    address addr = registry.getChildAddress();
+    child = Child(addr);
+    child.unpause();
     emit Unpause();
     return true;
   }

@@ -1,12 +1,9 @@
 const { expectEvent, shouldFail } = require('openzeppelin-test-helpers');
 
 const Factory = artifacts.require('Factory')
-const MasterRegistry = artifacts.require('MasterRegistry')
-const DAO = artifacts.require('DAO')
-const Account = artifacts.require('Account')
-
-// ACOUNT = multisig
-// DAO = DAO
+const Registry = artifacts.require('Registry')
+const Child = artifacts.require('Child')
+const Parent = artifacts.require('Parent')
 
 const {
   buildCreate2Address,
@@ -15,7 +12,7 @@ const {
   isContract
 } = require('./helpers.js')
 
-const { abi:accountAbi, bytecode:accountBytecode } = require('../build/contracts/Account.json')
+const { bytecode:parentBytecode } = require('../build/contracts/Parent.json')
 let computedAddr
 let registry
 let dao
@@ -27,18 +24,19 @@ contract('Factory', (accounts) => {
   let creator = accounts[0]
 
   before('setup', async () => {
+    // deploy factory
     factory = await Factory.new()
     factoryInstance = await Factory.at(factory.address)
 
     // deploy registry
-    registry = await MasterRegistry.new()
-    registryInstance = await MasterRegistry.at(registry.address)
+    registry = await Registry.new()
+    registryInstance = await Registry.at(registry.address)
 
     // constructor arguments are appended to contract bytecode
-    bytecode = `${accountBytecode}${encodeParam('address', creator).slice(2)}${encodeParam('address', registry.address).slice(2)}`
+    bytecode = `${parentBytecode}${encodeParam('address', creator).slice(2)}${encodeParam('address', registry.address).slice(2)}`
     salt = 1
 
-    // determine address of Account before it is deployed
+    // determine address of Parent before it is deployed
     computedAddr = buildCreate2Address(
       factory.address,
       numberToUint256(salt),
@@ -52,34 +50,34 @@ contract('Factory', (accounts) => {
       const contract = await isContract(factory.address)
       assert.isTrue(contract)
     })
-    it('should create Account address but not deploy it', async () => {
+    it('should create Parent address but not deploy it', async () => {
       const contract = await isContract(computedAddr)
       assert.isFalse(contract)
     })
-    it('should deploy DAO', async () => {
-      // deploy DAO
-      dao = await DAO.new(accounts[2], computedAddr, registry.address);
-      daoInstance = await DAO.at(dao.address)
+    it('should deploy Child', async () => {
+      // deploy child
+      child = await Child.new(accounts[2], computedAddr, registry.address);
+      childInstance = await Child.at(child.address)
 
-      const contract = await isContract(dao.address)
+      const contract = await isContract(child.address)
       assert.isTrue(contract)
     })
-    it('should deploy Account and allow it to pause DAO', async () => {
-      // deploy DAO and pass address of Account contract (not yet deployed)
-      dao = await DAO.new(accounts[2], computedAddr, registry.address);
-      daoInstance = await DAO.at(dao.address)
+    it('should deploy Parent and allow it to pause DAO', async () => {
+      // deploy child and pass address of Parent contract (not yet deployed)
+      child = await Child.new(accounts[2], computedAddr, registry.address);
+      childInstance = await Child.at(child.address)
       
-      // now deploy Account
+      // now deploy Parent
       const tx = await factoryInstance.deploy(bytecode, salt);
       const deployedAddress = tx.receipt.logs[0].args.addr.toLowerCase();
-      accountInstance = await Account.at(deployedAddress);
+      parentInstance = await Parent.at(deployedAddress);
 
       const contract = await isContract(deployedAddress)
       assert.isTrue(contract)
 
-      // call pause function in Account, which should pause DAO
-      const { logs } = await accountInstance.pause();
-      const paused = await daoInstance.paused();
+      // call pause function in Parent, which should pause Child
+      const { logs } = await parentInstance.pause();
+      const paused = await childInstance.paused();
       assert.isTrue(paused)
 
       // expect Pause event
@@ -87,7 +85,7 @@ contract('Factory', (accounts) => {
 
     })
     it('should revert if deploying to computedAddr again', async () => {
-      // now deploy Account
+      // deploy the same contract
       await shouldFail(factoryInstance.deploy(bytecode, salt));
 
     })

@@ -1,19 +1,19 @@
 pragma solidity >0.4.99 <0.6.0;
 
 import "openzeppelin-solidity/contracts/lifecycle/Pausable.sol";
-import "./MasterRegistry.sol";
+import "./Registry.sol";
 
-contract DAO is Pausable {
+contract Child is Pausable {
   address public member;
-  address public master;
-  MasterRegistry public masterRegistry;
+  Registry public registry;
 
-  constructor(address payable _member, address _account, address _registry) public {
+  // sets parent as pauser
+  // adds this Child address to registry
+  constructor(address payable _member, address _parent, address _registry) public {
     member = address(_member);
-    master = address(_account);
-    PauserRole.addPauser(address(_account));
-    masterRegistry = MasterRegistry(_registry);
-    masterRegistry.setDAOAddress(address(this));
+    PauserRole.addPauser(address(_parent));
+    registry = Registry(_registry);
+    registry.setChildAddress(address(this));
   }
 
   function setMember(address _member) public {
@@ -25,4 +25,5 @@ contract DAO is Pausable {
     require(msg.sender == member);
     selfdestruct(recipient);
   }
+
 }
