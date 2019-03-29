@@ -1,0 +1,20 @@
+{
+  "name": "create2",
+  "version": "1.0.0",
+  "description": "testing",
+  "main": "truffle-config.js",
+  "directories": {
+    "test": "test"
+  },
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "kseniya",
+  "license": "ISC",
+  "dependencies": {},
+  "devDependencies": {
+    "solc": "^0.5.6",
+    "truffle-hdwallet-provider": "^1.0.5",
+    "web3": "^1.0.0-beta.50"
+  }
+}
